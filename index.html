@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Disponibilités — Trouver une date commune</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --green: #1D9E75;
+    --green-dark: #0F6E56;
+    --green-light: #E1F5EE;
+    --green-mid: #9FE1CB;
+    --green-strong: #5DCAA5;
+    --green-text: #085041;
+    --gray-100: #f5f5f5;
+    --gray-200: #e8e8e8;
+    --gray-400: #aaa;
+    --gray-600: #666;
+    --gray-800: #222;
+    --red-today: #E24B4A;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+    background: #f0f2f0;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2rem 1rem;
+    color: var(--gray-800);
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 700px;
+    padding: 2rem;
+    box-shadow: 0 2px 24px rgba(0,0,0,0.08);
+  }
+
+  .app-title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--green);
+    margin-bottom: 0.4rem;
+  }
+
+  h1 { font-size: 22px; font-weight: 600; color: var(--gray-800); margin-bottom: 1.2rem; }
+  h2 { font-size: 22px; font-weight: 600; color: var(--gray-800); margin-bottom: 0; }
+
+  .step { display: none; }
+  .step.active { display: block; }
+
+  input[type=text] {
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.15s;
+    font-family: inherit;
+    width: 100%;
+  }
+  input[type=text]:focus { border-color: var(--green); }
+
+  .row { display: flex; gap: 10px; }
+  .row input { flex: 1; }
+
+  .hint { font-size: 13px; color: var(--gray-400); margin-top: 10px; }
+  .label { font-size: 14px; color: var(--gray-600); margin-bottom: 6px; }
+
+  .btn { border: none; border-radius: var(--radius-sm); padding: 10px 22px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit; transition: background 0.15s, transform 0.1s; white-space: nowrap; }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-green { background: var(--green); color: #fff; }
+  .btn-green:hover:not(:disabled) { background: var(--green-dark); }
+  .btn-outline { background: #fff; color: var(--gray-800); border: 1.5px solid var(--gray-200); }
+  .btn-outline:hover:not(:disabled) { background: var(--gray-100); }
+  .btn-sm { padding: 7px 14px; font-size: 13px; }
+
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 1rem; }
+
+  /* Loader */
+  .loader { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--gray-600); padding: 1rem 0; }
+  .spinner { width: 18px; height: 18px; border: 2px solid var(--gray-200); border-top-color: var(--green); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Calendar */
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; }
+  .nav-arrows { display: flex; gap: 6px; }
+  .nav-btn { background: #fff; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); width: 34px; height: 34px; cursor: pointer; font-size: 17px; color: var(--gray-800); display: flex; align-items: center; justify-content: center; transition: background 0.12s; }
+  .nav-btn:hover { background: var(--gray-100); }
+
+  .cal-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; border: 1px solid var(--gray-200); border-radius: var(--radius); overflow: hidden; }
+  .cal-table th { font-size: 12px; font-weight: 400; color: var(--gray-600); text-align: center; padding: 8px 4px; background: var(--gray-100); border-bottom: 1px solid var(--gray-200); }
+  .cal-table th:last-child { font-weight: 600; }
+  .cal-table td { border: 0.5px solid var(--gray-200); vertical-align: top; padding: 6px 8px; height: 80px; cursor: pointer; transition: background 0.1s; }
+  .cal-table td:hover:not(.td-other):not(.td-past) { background: #f7fdf9; }
+  .cal-table td.td-other { background: var(--gray-100); cursor: default; }
+  .cal-table td.td-past { background: #fafafa; cursor: default; }
+  .cal-table td.td-selected { background: var(--green-light); }
+
+  .day-num { font-size: 13px; color: var(--gray-600); display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; }
+  .day-num.is-today { background: var(--red-today); color: #fff; border-radius: 50%; font-weight: 600; font-size: 12px; }
+  .day-num.is-other { color: var(--gray-400); }
+  .day-num.is-past { color: #ccc; }
+
+  .check-area { display: flex; align-items: center; justify-content: center; margin-top: 8px; }
+  .check-area input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--green); cursor: pointer; }
+  .td-past .check-area, .td-other .check-area { display: none; }
+
+  .recap { font-size: 13px; color: var(--gray-600); margin: 1rem 0; }
+  .recap strong { color: var(--gray-800); }
+
+  /* Chips */
+  .chip-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 1rem 0; }
+  .chip { background: var(--gray-100); border: 1px solid var(--gray-200); border-radius: 20px; padding: 5px 14px; font-size: 13px; color: var(--gray-800); display: flex; align-items: center; gap: 6px; }
+  .chip-count { color: var(--gray-400); font-size: 12px; }
+
+  /* Results */
+  .res-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; border: 1px solid var(--gray-200); border-radius: var(--radius); overflow: hidden; }
+  .res-table th { font-size: 12px; font-weight: 400; color: var(--gray-600); text-align: center; padding: 8px 4px; background: var(--gray-100); border-bottom: 1px solid var(--gray-200); }
+  .res-table th:last-child { font-weight: 600; }
+  .res-cell { border: 0.5px solid var(--gray-200); vertical-align: top; padding: 5px 6px; height: 72px; text-align: center; }
+  .res-cell.other-m { background: var(--gray-100); }
+  .res-cell.c0 { background: #fff; }
+  .res-cell.c1 { background: #E1F5EE; }
+  .res-cell.c2 { background: #9FE1CB; }
+  .res-cell.c3 { background: #5DCAA5; }
+  .res-cell.c4plus { background: #1D9E75; }
+  .res-num { font-size: 12px; color: var(--gray-600); display: block; margin-bottom: 3px; }
+  .res-bar { font-size: 11px; color: var(--gray-400); }
+  .res-cell.c3 .res-num, .res-cell.c3 .res-bar { color: var(--green-text); }
+  .res-cell.c4plus .res-num, .res-cell.c4plus .res-bar { color: #fff; }
+  .res-names { font-size: 9px; color: var(--gray-400); line-height: 1.3; margin-top: 2px; }
+  .res-cell.c3 .res-names { color: var(--green-text); }
+  .res-cell.c4plus .res-names { color: rgba(255,255,255,0.85); }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; }
+  .leg { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--gray-600); }
+  .leg-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+  .section-title { font-size: 12px; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.06em; margin: 1.2rem 0 0.4rem; }
+
+  .alert { padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; margin-top: 10px; }
+  .alert-err { background: #fff0f0; border: 1px solid #fca; color: #c00; }
+  .alert-ok { background: #f0fdf4; border: 1px solid var(--green-mid); color: var(--green-text); }
+
+  .step-dots { display: flex; gap: 6px; margin-bottom: 1.5rem; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gray-200); }
+  .dot.on { background: var(--green); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="app-title">Sondage de disponibilités</div>
+
+  <!-- STEP 1 : Prénom -->
+  <div id="step1" class="step active">
+    <div class="step-dots"><div class="dot on"></div><div class="dot"></div><div class="dot"></div></div>
+    <h1>Quel est ton prénom ?</h1>
+    <div class="row">
+      <input type="text" id="nameInput" placeholder="Ex : Sophie" maxlength="30" />
+      <button class="btn btn-green" onclick="goToCalendar()">Continuer →</button>
+    </div>
+    <p class="hint">Tu pourras ensuite cocher les jours où tu es disponible.</p>
+    <div id="participantsBanner" style="display:none;margin-top:1.5rem;">
+      <div class="section-title">Déjà enregistrés</div>
+      <div class="chip-list" id="bannerChips"></div>
+      <button class="btn btn-outline btn-sm" onclick="goToResults()">Voir les résultats →</button>
+    </div>
+  </div>
+
+  <!-- STEP 2 : Calendrier -->
+  <div id="step2" class="step">
+    <div class="step-dots"><div class="dot"></div><div class="dot on"></div><div class="dot"></div></div>
+    <div class="cal-nav">
+      <h2 id="calHeading"></h2>
+      <div class="nav-arrows">
+        <button class="nav-btn" onclick="changeMonth(-1)">‹</button>
+        <button class="nav-btn" onclick="changeMonth(1)">›</button>
+      </div>
+    </div>
+    <table class="cal-table">
+      <thead><tr>
+        <th>lun.</th><th>mar.</th><th>mer.</th><th>jeu.</th><th>ven.</th><th>sam.</th><th>dim.</th>
+      </tr></thead>
+      <tbody id="calBody"></tbody>
+    </table>
+    <p class="recap" id="recap">Aucun jour sélectionné.</p>
+    <div class="actions">
+      <button class="btn btn-green" id="validateBtn" onclick="validate()">Valider mes disponibilités</button>
+      <button class="btn btn-outline" onclick="goStep(1)">← Retour</button>
+    </div>
+    <div id="saveMsg"></div>
+  </div>
+
+  <!-- STEP 3 : Résultats -->
+  <div id="step3" class="step">
+    <div class="step-dots"><div class="dot"></div><div class="dot"></div><div class="dot on"></div></div>
+    <div class="cal-nav">
+      <h2 id="resHeading"></h2>
+      <div class="nav-arrows">
+        <button class="nav-btn" onclick="changeResMonth(-1)">‹</button>
+        <button class="nav-btn" onclick="changeResMonth(1)">›</button>
+      </div>
+    </div>
+
+    <div id="resLoader" class="loader"><div class="spinner"></div>Chargement des disponibilités...</div>
+
+    <div id="resContent" style="display:none;">
+      <table class="res-table">
+        <thead><tr>
+          <th>lun.</th><th>mar.</th><th>mer.</th><th>jeu.</th><th>ven.</th><th>sam.</th><th>dim.</th>
+        </tr></thead>
+        <tbody id="resBody"></tbody>
+      </table>
+      <div class="legend">
+        <div class="leg"><div class="leg-dot" style="background:#E1F5EE;border:1px solid #9FE1CB;"></div>1 pers.</div>
+        <div class="leg"><div class="leg-dot" style="background:#9FE1CB;"></div>2 pers.</div>
+        <div class="leg"><div class="leg-dot" style="background:#5DCAA5;"></div>3 pers.</div>
+        <div class="leg"><div class="leg-dot" style="background:#1D9E75;"></div>4+ pers.</div>
+      </div>
+      <div class="section-title">Participants</div>
+      <div class="chip-list" id="resChipList"></div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-outline" onclick="goStep(1)">← Ajouter / modifier</button>
+      <button class="btn btn-green" onclick="refreshResults()">↻ Actualiser</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const MONTHS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+const today = new Date();
+let curY = today.getFullYear(), curM = today.getMonth();
+let resY = curY, resM = curM;
+let userName = "";
+let selected = new Set();
+let participants = [];
+
+// Identifiants intégrés directement
+const apiKey = "$2a$10$qtyfrA1W/lj5Z0EmV/KdleTuJaB3HhFvNTlIgaamPIQZ/TXq3wv3O";
+const binId = "69ee3ebaaaba8821973d3544";
+
+function goStep(n) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step' + n).classList.add('active');
+}
+
+function start() {
+  goStep(1);
+  loadBanner();
+}
+
+async function fetchBin() {
+  const r = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
+    headers: { "X-Master-Key": apiKey }
+  });
+  if (!r.ok) throw new Error("Erreur API " + r.status);
+  const data = await r.json();
+  return data.record.participants || [];
+}
+
+async function saveBin(parts) {
+  const r = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Master-Key": apiKey },
+    body: JSON.stringify({ participants: parts })
+  });
+  if (!r.ok) throw new Error("Erreur sauvegarde " + r.status);
+}
+
+async function loadBanner() {
+  try {
+    participants = await fetchBin();
+    const banner = document.getElementById("participantsBanner");
+    if (participants.length === 0) { banner.style.display = "none"; return; }
+    banner.style.display = "block";
+    document.getElementById("bannerChips").innerHTML = participants.map(p =>
+      `<div class="chip">${p.name}<span class="chip-count">${p.days.length}j</span></div>`
+    ).join("");
+  } catch(e) {}
+}
+
+function goToCalendar() {
+  const v = document.getElementById("nameInput").value.trim();
+  if (!v) { document.getElementById("nameInput").focus(); return; }
+  userName = v;
+  selected.clear();
+  const existing = participants.find(p => p.name.toLowerCase() === userName.toLowerCase());
+  if (existing) existing.days.forEach(d => selected.add(d));
+  curY = today.getFullYear(); curM = today.getMonth();
+  renderCal();
+  goStep(2);
+}
+
+function key(y, m, d) {
+  return y + '-' + String(m+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+}
+
+function renderCal() {
+  document.getElementById("calHeading").textContent = MONTHS[curM] + " " + curY;
+  const firstDow = new Date(curY, curM, 1).getDay();
+  const offset = firstDow === 0 ? 6 : firstDow - 1;
+  const dim = new Date(curY, curM+1, 0).getDate();
+  const prevDim = new Date(curY, curM, 0).getDate();
+  let cells = [];
+  for (let i = 0; i < offset; i++) cells.push({ d: prevDim-offset+1+i, type: "other" });
+  for (let d = 1; d <= dim; d++) {
+    const dt = new Date(curY, curM, d);
+    const todayM = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const isPast = dt < todayM;
+    cells.push({ d, type: isPast ? "past" : "active", isToday: dt.toDateString() === today.toDateString(), k: key(curY, curM, d) });
+  }
+  while (cells.length % 7 !== 0) cells.push({ d: cells.length-offset-dim+1, type: "other" });
+
+  let html = "";
+  cells.forEach((c, i) => {
+    if (i % 7 === 0) html += "<tr>";
+    if (c.type === "other") {
+      html += `<td class="td-other"><span class="day-num is-other">${c.d}</span></td>`;
+    } else if (c.type === "past") {
+      html += `<td class="td-past"><span class="day-num is-past">${c.d}</span></td>`;
+    } else {
+      const sel = selected.has(c.k);
+      const nc = c.isToday ? "is-today" : "";
+      html += `<td class="${sel ? "td-selected" : ""}" onclick="toggleCel('${c.k}',this)">
+        <span class="day-num ${nc}">${c.d}</span>
+        <div class="check-area"><input type="checkbox" ${sel ? "checked" : ""} onclick="cbClick(event,'${c.k}',this)"></div>
+      </td>`;
+    }
+    if (i % 7 === 6) html += "</tr>";
+  });
+  document.getElementById("calBody").innerHTML = html;
+  updateRecap();
+}
+
+function toggleCel(k, td) {
+  const cb = td.querySelector("input");
+  if (!cb) return;
+  if (selected.has(k)) { selected.delete(k); cb.checked = false; td.classList.remove("td-selected"); }
+  else { selected.add(k); cb.checked = true; td.classList.add("td-selected"); }
+  updateRecap();
+}
+
+function cbClick(e, k, cb) {
+  e.stopPropagation();
+  const td = cb.closest("td");
+  if (cb.checked) { selected.add(k); td.classList.add("td-selected"); }
+  else { selected.delete(k); td.classList.remove("td-selected"); }
+  updateRecap();
+}
+
+function updateRecap() {
+  const n = selected.size;
+  document.getElementById("recap").innerHTML = n === 0
+    ? "Aucun jour sélectionné."
+    : `<strong>${n} jour${n > 1 ? "s" : ""}</strong> sélectionné${n > 1 ? "s" : ""}.`;
+}
+
+function changeMonth(d) {
+  curM += d;
+  if (curM < 0) { curM = 11; curY--; }
+  if (curM > 11) { curM = 0; curY++; }
+  renderCal();
+}
+
+async function validate() {
+  if (selected.size === 0) { alert("Sélectionne au moins un jour !"); return; }
+  const btn = document.getElementById("validateBtn");
+  const msg = document.getElementById("saveMsg");
+  btn.disabled = true;
+  btn.textContent = "Sauvegarde...";
+  msg.innerHTML = "";
+  try {
+    let parts = await fetchBin();
+    const idx = parts.findIndex(p => p.name.toLowerCase() === userName.toLowerCase());
+    const entry = { name: userName, days: [...selected].sort() };
+    if (idx >= 0) parts[idx] = entry; else parts.push(entry);
+    await saveBin(parts);
+    participants = parts;
+    msg.innerHTML = `<div class="alert alert-ok">✓ Disponibilités de <strong>${userName}</strong> enregistrées !</div>`;
+    loadBanner();
+    setTimeout(() => { goToResults(); }, 1200);
+  } catch(e) {
+    msg.innerHTML = `<div class="alert alert-err">Erreur : ${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.textContent = "Valider mes disponibilités";
+}
+
+async function goToResults() {
+  resY = today.getFullYear(); resM = today.getMonth();
+  goStep(3);
+  await refreshResults();
+}
+
+async function refreshResults() {
+  document.getElementById("resLoader").style.display = "flex";
+  document.getElementById("resContent").style.display = "none";
+  try {
+    participants = await fetchBin();
+    renderResults();
+    renderResChips();
+    document.getElementById("resLoader").style.display = "none";
+    document.getElementById("resContent").style.display = "block";
+  } catch(e) {
+    document.getElementById("resLoader").innerHTML = `<span style="color:#c00;">Erreur de chargement.</span>`;
+  }
+}
+
+function changeResMonth(d) {
+  resM += d;
+  if (resM < 0) { resM = 11; resY--; }
+  if (resM > 11) { resM = 0; resY++; }
+  renderResults();
+}
+
+function renderResults() {
+  document.getElementById("resHeading").textContent = MONTHS[resM] + " " + resY;
+  const firstDow = new Date(resY, resM, 1).getDay();
+  const offset = firstDow === 0 ? 6 : firstDow - 1;
+  const dim = new Date(resY, resM+1, 0).getDate();
+  const prevDim = new Date(resY, resM, 0).getDate();
+  const total = participants.length;
+  let cells = [];
+  for (let i = 0; i < offset; i++) cells.push({ d: prevDim-offset+1+i, other: true });
+  for (let d = 1; d <= dim; d++) cells.push({ d, other: false, k: key(resY, resM, d) });
+  while (cells.length % 7 !== 0) cells.push({ d: cells.length-offset-dim+1, other: true });
+
+  let html = "";
+  cells.forEach((c, i) => {
+    if (i % 7 === 0) html += "<tr>";
+    if (c.other) {
+      html += `<td class="res-cell other-m"></td>`;
+    } else {
+      const avail = participants.filter(p => p.days.includes(c.k));
+      const cnt = avail.length;
+      const cls = cnt === 0 ? "c0" : cnt === 1 ? "c1" : cnt === 2 ? "c2" : cnt === 3 ? "c3" : "c4plus";
+      const names = avail.map(p => p.name).join(", ");
+      html += `<td class="res-cell ${cls}">
+        <span class="res-num">${c.d}</span>
+        <span class="res-bar">${cnt}/${total}</span>
+        ${names ? `<div class="res-names">${names}</div>` : ""}
+      </td>`;
+    }
+    if (i % 7 === 6) html += "</tr>";
+  });
+  document.getElementById("resBody").innerHTML = html;
+}
+
+function renderResChips() {
+  document.getElementById("resChipList").innerHTML = participants.map(p =>
+    `<div class="chip">${p.name}<span class="chip-count">${p.days.length}j</span></div>`
+  ).join("");
+}
+
+document.getElementById("nameInput").addEventListener("keydown", e => { if (e.key === "Enter") goToCalendar(); });
+
+start();
+</script>
+</body>
+</html>
